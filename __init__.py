@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+from datetime import timedelta
+import logging
+
+import aiohttp
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
+
+from . import pawsync
+from .const import DOMAIN, PAWSYNC_COORDINATOR, PLATFORMS
+
+logger = logging.getLogger(__name__)
+
+# Validation of the user's configuration
+CONFIG_SCHEMA = vol.Schema(
+    {
+        DOMAIN: vol.Schema(
+            {
+                vol.Required(CONF_USERNAME): cv.string,
+                vol.Required(CONF_PASSWORD): cv.string,
+            })
+    },
+    extra=vol.ALLOW_EXTRA
+)
+
+all_devices: dict[str, pawsync.Device] = {}
+sessions: dict[str, aiohttp.ClientSession] = {}
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Pawsync component (legacy YAML support)."""
+    hass.data.setdefault(DOMAIN, {})
+
+    # Import YAML config if present
+    if DOMAIN in config:
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": "import"},
+                data=config[DOMAIN],
+            )
+        )
+        
+    async def handle_feed(call: ServiceCall):
+        entity_id = call.data.get("entity_id")
+        if entity_id is None:
+            return
+        entity = hass.states.get(entity_id)
+        if entity is None:
+            return
+        device_id = entity.attributes.get("device_id")
+        if device_id is None:
+            return
+        
+        logger.warning(f"Requesting feed for entity {entity_id} => device {device_id}")
+        
+        device = all_devices.get(device_id)
+        if device is None:
+            return
+        
+        session = sessions.get(device_id)
+        if session is None:
+            return
+        await device.requestFeed(session)
+
+    # Service schema: accept an entity id (a Pawsync device entity)
+    SERVICE_FEED_SCHEMA = vol.Schema({vol.Required("entity_id"): cv.entity_id})
+
+    hass.services.async_register(DOMAIN, "feed", handle_feed, schema=SERVICE_FEED_SCHEMA)
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up a config entry."""
+    username = entry.data[CONF_USERNAME]
+    password = entry.data[CONF_PASSWORD]
+    
+    session = async_get_clientsession(hass)
+
+    await pawsync.login(session, username, password)
+    
+    async def async_update():
+        devices = await pawsync.getDeviceList(session, logger)
+        
+        if not devices:
+            await pawsync.login(session, username, password)
+            devices = await pawsync.getDeviceList(session, logger)
+            
+            if not devices:
+                devices = []
+        
+        for d in devices:
+            sessions[d.deviceId] = session
+            all_devices[d.deviceId] = d
+        
+        return devices
+        
+    coordinator = DataUpdateCoordinator(
+        hass,
+        logger,
+        name="pawsync-update",
+        update_interval=timedelta(minutes=15),
+        update_method=async_update,
+        config_entry=entry,
+    )
+    await coordinator.async_config_entry_first_refresh()
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {
+        PAWSYNC_COORDINATOR: coordinator,
+    }
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+
+    return unload_ok
+
