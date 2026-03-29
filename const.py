@@ -5,4 +5,4 @@ from homeassistant.const import Platform
 DOMAIN = "pawsync"
 PAWSYNC_COORDINATOR = "pawsync_coordinator"
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
