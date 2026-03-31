@@ -72,10 +72,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         session = sessions.get(device_id)
         if session is None:
             return
-        await device.requestFeed(session)
 
-    # Service schema: accept an entity id (a Pawsync device entity)
-    SERVICE_FEED_SCHEMA = vol.Schema({vol.Required("entity_id"): cv.entity_id})
+        amount = call.data.get("amount")
+        await device.requestFeed(session, amount)
+
+    # Service schema: accept an entity id (a Pawsync device entity) and amount
+    SERVICE_FEED_SCHEMA = vol.Schema({
+        vol.Required("entity_id"): cv.entity_id,
+        vol.Required("amount"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    })
 
     hass.services.async_register(DOMAIN, "feed", handle_feed, schema=SERVICE_FEED_SCHEMA)
     return True

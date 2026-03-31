@@ -4,3 +4,6 @@ feed:
     entity_id:
       description: The entity ID of the device to request feed for
       example: "sensor.pawsync_device_id"
+    amount:
+      description: The amount to feed
+      example: 12

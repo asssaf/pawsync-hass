@@ -72,7 +72,7 @@ class Device:
         self.petId = d["petId"]
         self.deviceProp = d["deviceProp"]
         
-    async def requestFeed(self, session: aiohttp.ClientSession):
+    async def requestFeed(self, session: aiohttp.ClientSession, amount: int):
         json = {
             "acceptLanguage": "en",
             "accountID": context["accountID"],
@@ -90,7 +90,7 @@ class Device:
             "configModule": self.configModel,
             "payload": {
                 "data": {
-                    "serving1": 12,
+                    "serving1": amount,
                     "cid": self.deviceId,
                     "configModule": self.configModel
                 },
@@ -119,6 +119,7 @@ if __name__ == '__main__':
     parser.add_argument("email", type=str)
     parser.add_argument("password", type=str)
     parser.add_argument("--feed", action='store_true')
+    parser.add_argument("--amount", type=int, default=12)
     args = parser.parse_args()
 
     logger = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ if __name__ == '__main__':
             print(vars(d))
         
         if args.feed:
-            f = await devices[0].requestFeed(session)
+            f = await devices[0].requestFeed(session, args.amount)
             print(await f.json())
         
         await session.close()
