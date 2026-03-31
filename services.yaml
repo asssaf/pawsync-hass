@@ -3,7 +3,17 @@ feed:
   fields:
     entity_id:
       description: The entity ID of the device to request feed for
+      required: true
       example: "sensor.pawsync_device_id"
+      selector:
+        entity:
+          integration: pawsync
     amount:
       description: The amount to feed
+      required: true
       example: 12
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
