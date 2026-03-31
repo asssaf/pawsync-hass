@@ -40,6 +40,7 @@ Trigger a manual feeding for a device:
 service: pawsync.feed
 data:
   entity_id: sensor.pawsync_device_id
+  amount: 12
 ```
 
 ## License
