@@ -43,6 +43,8 @@ async def request_post(session: aiohttp.ClientSession, type: str, method: str, d
         json=json)
 
 async def login(session: aiohttp.ClientSession, email: str, password: str):
+    unique_terminal_id = hashlib.md5(email.encode('utf-8')).hexdigest()
+    context["terminalId"] = unique_terminal_id
     r = await request_post(session, 'userManaged', 'login', 
         {
             'email': email,
