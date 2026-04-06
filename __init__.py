@@ -76,13 +76,41 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         amount = call.data.get("amount")
         await device.requestFeed(session, amount)
 
+    async def handle_zero_bowl(call: ServiceCall):
+        entity_id = call.data.get("entity_id")
+        if entity_id is None:
+            return
+        entity = hass.states.get(entity_id)
+        if entity is None:
+            return
+        device_id = entity.attributes.get("device_id")
+        if device_id is None:
+            return
+
+        logger.warning(f"Zeroing bowl for entity {entity_id} => device {device_id}")
+
+        device = all_devices.get(device_id)
+        if device is None:
+            return
+
+        session = sessions.get(device_id)
+        if session is None:
+            return
+
+        await device.requestZeroBowl(session)
+
     # Service schema: accept an entity id (a Pawsync device entity) and amount
     SERVICE_FEED_SCHEMA = vol.Schema({
         vol.Required("entity_id"): cv.entity_id,
         vol.Required("amount"): vol.All(vol.Coerce(int), vol.Range(min=1)),
     })
 
+    SERVICE_ZERO_BOWL_SCHEMA = vol.Schema({
+        vol.Required("entity_id"): cv.entity_id,
+    })
+
     hass.services.async_register(DOMAIN, "feed", handle_feed, schema=SERVICE_FEED_SCHEMA)
+    hass.services.async_register(DOMAIN, "zero_bowl", handle_zero_bowl, schema=SERVICE_ZERO_BOWL_SCHEMA)
     return True
 
 

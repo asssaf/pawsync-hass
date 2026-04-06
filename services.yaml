@@ -17,3 +17,13 @@ feed:
           min: 1
           max: 100
           mode: box
+zero_bowl:
+  description: Zero out the feeding bowl for a Pawsync device
+  fields:
+    entity_id:
+      description: The entity ID of the device to zero the bowl for
+      required: true
+      example: "sensor.pawsync_device_id"
+      selector:
+        entity:
+          integration: pawsync

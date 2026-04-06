@@ -104,6 +104,37 @@ class Device:
             'https://smartapi.pawsync.com/pet/api/deviceManaged/v1/bypassV2',
             json=json)
 
+    async def requestZeroBowl(self, session: aiohttp.ClientSession):
+        json = {
+            "acceptLanguage": "en",
+            "accountID": context["accountID"],
+            "appID": context["appID"],
+            "appVersion": context["clientVersion"],
+            "debugMode": context["debugMode"],
+            "method": "bypassV2",
+            "phoneBrand": "",
+            "phoneOS": context["osInfo"],
+            "timeZone": context["timeZone"],
+            "token": context["token"],
+            "traceId": context["traceId"],
+            "userCountryCode": "US",
+            "cid": self.deviceId,
+            "configModule": self.configModel,
+            "payload": {
+                "data": {
+                    "cid": self.deviceId,
+                    "configModule": self.configModel
+                },
+                "method": "setFeedingBowlToZero",
+                "source": "APP"
+            }
+        }
+        print(json)
+
+        return await session.post(
+            'https://smartapi.pawsync.com/pet/api/deviceManaged/v1/bypassV2',
+            json=json)
+
 async def getDeviceList(session: aiohttp.ClientSession, logger: logging.Logger):
     r = await request_post(session, 'deviceManaged', 'deviceList4Pet', {})
     devicesJson = await r.json()
@@ -120,6 +151,7 @@ if __name__ == '__main__':
     parser.add_argument("password", type=str)
     parser.add_argument("--feed", action='store_true')
     parser.add_argument("--amount", type=int, default=12)
+    parser.add_argument("--zero-bowl", action='store_true')
     args = parser.parse_args()
 
     logger = logging.getLogger(__name__)
@@ -140,6 +172,10 @@ if __name__ == '__main__':
             f = await devices[0].requestFeed(session, args.amount)
             print(await f.json())
         
+        if args.zero_bowl:
+            z = await devices[0].requestZeroBowl(session)
+            print(await z.json())
+
         await session.close()
     
     asyncio.run(impl())
