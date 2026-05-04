@@ -148,6 +148,7 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
                 "biz_id": device.bizId,
                 "pet_id": device.petId,
                 "device_prop": device.deviceProp,
+                "terminal_id": device.terminalId,
             }
         else:
             self._attr_name = f"{device.deviceName} {description.name}"
@@ -191,16 +192,10 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
                         "biz_id": device.bizId,
                         "pet_id": device.petId,
                         "device_prop": device.deviceProp,
+                        "terminal_id": device.terminalId,
                     }
                 break
         super()._handle_coordinator_update()
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]: # pyright: ignore[reportIncompatibleVariableOverride]
-        """Return the state attributes."""
-        return {
-            "terminal_id": self.device.terminalId,
-        }
 
     @property
     def native_value(self) -> Any: # pyright: ignore[reportIncompatibleVariableOverride]
