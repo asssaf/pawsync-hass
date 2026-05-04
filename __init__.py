@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+import uuid
 
 import aiohttp
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 import homeassistant.helpers.config_validation as cv
@@ -22,6 +24,23 @@ from . import pawsync
 from .const import DOMAIN, PAWSYNC_COORDINATOR, PLATFORMS
 
 logger = logging.getLogger(__name__)
+
+STORE_VERSION = 1
+STORAGE_KEY = "pawsync_terminal_id"
+
+async def async_get_or_create_terminal_id(hass: HomeAssistant, entry_id: str) -> str:
+    store = Store(hass, STORE_VERSION, STORAGE_KEY)
+    data = await store.async_load()
+    if data is None:
+        data = {}
+
+    terminal_id = data.get(entry_id)
+    if terminal_id is None:
+        terminal_id = str(uuid.uuid1()).replace('-', '')[-33:]
+        data[entry_id] = terminal_id
+        await store.async_save(data)
+
+    return terminal_id
 
 # Validation of the user's configuration
 CONFIG_SCHEMA = vol.Schema(
@@ -87,14 +106,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     password = entry.data[CONF_PASSWORD]
     
     session = async_get_clientsession(hass)
+    terminal_id = await async_get_or_create_terminal_id(hass, entry.entry_id)
 
-    await pawsync.login(session, username, password)
+    await pawsync.login(session, username, password, terminal_id=terminal_id)
     
     async def async_update():
         devices = await pawsync.getDeviceList(session, logger)
         
         if not devices:
-            await pawsync.login(session, username, password)
+            await pawsync.login(session, username, password, terminal_id=terminal_id)
             devices = await pawsync.getDeviceList(session, logger)
             
             if not devices:

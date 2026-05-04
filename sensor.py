@@ -73,6 +73,7 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
             "biz_id": self.device.bizId,
             "pet_id": self.device.petId,
             "device_prop": self.device.deviceProp,
+            "terminal_id": self.device.terminalId,
         }
         
     @property

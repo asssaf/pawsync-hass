@@ -42,7 +42,11 @@ async def request_post(session: aiohttp.ClientSession, type: str, method: str, d
         f'https://smartapi.pawsync.com/pet/api/{type}/v1/{method}',
         json=json)
 
-async def login(session: aiohttp.ClientSession, email: str, password: str):
+async def login(session: aiohttp.ClientSession, email: str, password: str, terminal_id: str | None = None):
+    if terminal_id is None:
+        terminal_id = str(uuid.uuid1()).replace('-', '')[-33:]
+
+    context["terminalId"] = terminal_id
     r = await request_post(session, 'userManaged', 'login', 
         {
             'email': email,
@@ -71,6 +75,7 @@ class Device:
         self.bizId = d["bizId"]
         self.petId = d["petId"]
         self.deviceProp = d["deviceProp"]
+        self.terminalId = context["terminalId"]
         
     async def requestFeed(self, session: aiohttp.ClientSession):
         json = {
