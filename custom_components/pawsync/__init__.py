@@ -4,7 +4,6 @@ import logging
 import uuid
 from datetime import timedelta
 
-import aiohttp
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -55,7 +54,7 @@ CONFIG_SCHEMA = vol.Schema(
 )
 
 all_devices: dict[str, pawsync.Device] = {}
-sessions: dict[str, aiohttp.ClientSession] = {}
+clients: dict[str, pawsync.PawsyncClient] = {}
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -89,12 +88,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         if device is None:
             return
 
-        session = sessions.get(device_id)
-        if session is None:
-            return
-
         amount = call.data.get("amount")
-        await device.requestFeed(session, amount)
+        await device.requestFeed(amount)
 
     # Service schema: accept an entity id (a Pawsync device entity) and amount
     SERVICE_FEED_SCHEMA = vol.Schema(
@@ -118,20 +113,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     terminal_id = await async_get_or_create_terminal_id(hass, entry.entry_id)
 
-    await pawsync.login(session, username, password, terminal_id=terminal_id)
+    client = pawsync.PawsyncClient(session, terminal_id=terminal_id)
+    await client.login(username, password)
 
     async def async_update():
-        devices = await pawsync.getDeviceList(session, logger)
+        devices = await client.get_device_list()
 
-        if not devices:
-            await pawsync.login(session, username, password, terminal_id=terminal_id)
-            devices = await pawsync.getDeviceList(session, logger)
+        if devices is None:
+            await client.login(username, password)
+            devices = await client.get_device_list()
 
-            if not devices:
+            if devices is None:
                 devices = []
 
         for d in devices:
-            sessions[d.deviceId] = session
+            clients[d.deviceId] = client
             all_devices[d.deviceId] = d
 
         return devices

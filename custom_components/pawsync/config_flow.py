@@ -26,24 +26,25 @@ class PawsyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 # Validate credentials
                 session = async_get_clientsession(self.hass)
-                await pawsync.login(
-                    session,
+                client = pawsync.PawsyncClient(session)
+                if not await client.login(
                     user_input[CONF_USERNAME],
                     user_input[CONF_PASSWORD],
-                )
+                ):
+                    errors["base"] = "invalid_auth"
+                else:
+                    # Check if entry already exists
+                    existing = await self.async_set_unique_id(user_input[CONF_USERNAME])
+                    if existing is None:
+                        self._abort_if_unique_id_configured()
 
-                # Check if entry already exists
-                existing = await self.async_set_unique_id(user_input[CONF_USERNAME])
-                if existing is None:
-                    self._abort_if_unique_id_configured()
-
-                    return self.async_create_entry(
-                        title=user_input[CONF_USERNAME],
-                        data=user_input,
-                    )
+                        return self.async_create_entry(
+                            title=user_input[CONF_USERNAME],
+                            data=user_input,
+                        )
             except Exception as err:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception: %s", err)
-                errors["base"] = "invalid_auth"
+                errors["base"] = "unknown"
 
         data_schema = vol.Schema(
             {
