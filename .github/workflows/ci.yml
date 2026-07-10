@@ -31,4 +31,4 @@ jobs:
       run: ruff format --check .
 
     - name: Run unit tests
-      run: pytest
+      run: pytest tests/
