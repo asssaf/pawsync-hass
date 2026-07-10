@@ -1,0 +1,26 @@
+[tool.ruff]
+# Target Python version
+target-version = "py314"
+
+# Standard line length
+line-length = 88
+
+[tool.ruff.lint]
+# Enable standard rules
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = ["E501"] # Ignore long lines for now to pass CI, as some Home Assistant patterns are long
+
+[tool.ruff.format]
+# Use double quotes, like Black
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
