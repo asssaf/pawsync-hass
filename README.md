@@ -70,6 +70,21 @@ Alternatively, you can run them directly without activating the virtual environm
 .venv/bin/ruff format .
 ```
 
+### Running Tests
+
+We use `pytest` to run tests. Activate the virtual environment first:
+
+```bash
+source .venv/bin/activate
+pytest
+```
+
+Alternatively, you can run them directly without activating the virtual environment:
+
+```bash
+.venv/bin/pytest
+```
+
 ## License
 
 MIT
