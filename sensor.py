@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,7 +14,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, UnitOfMass, UnitOfTime
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    UnitOfMass,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -27,6 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class PawsyncSensorEntityDescription(SensorEntityDescription):
     """Class describing Pawsync sensor entities."""
+
     value_fn: Callable[[pawsync.Device], Any] | None = None
 
 
@@ -50,7 +57,9 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfMass.GRAMS,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:database",
-        value_fn=lambda device: device.deviceProp.get("petFood", {}).get("bucketSurplus"),
+        value_fn=lambda device: device.deviceProp.get("petFood", {}).get(
+            "bucketSurplus"
+        ),
     ),
     PawsyncSensorEntityDescription(
         key="last_feeding_amount",
@@ -58,7 +67,9 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfMass.GRAMS,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:shaker",
-        value_fn=lambda device: device.deviceProp.get("petFood", {}).get("lastFeedingAmount"),
+        value_fn=lambda device: device.deviceProp.get("petFood", {}).get(
+            "lastFeedingAmount"
+        ),
     ),
     PawsyncSensorEntityDescription(
         key="content_remain_time",
@@ -66,7 +77,9 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.DAYS,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:calendar-clock",
-        value_fn=lambda device: device.deviceProp.get("petFood", {}).get("contentRemainTime"),
+        value_fn=lambda device: device.deviceProp.get("petFood", {}).get(
+            "contentRemainTime"
+        ),
     ),
     PawsyncSensorEntityDescription(
         key="battery_percent",
@@ -95,13 +108,27 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
         key="main_fw_version",
         name="Main firmware version",
         icon="mdi:chip",
-        value_fn=lambda device: next((fw["version"] for fw in device.deviceProp.get("firmwareInfos", []) if fw.get("isMainFw")), None),
+        value_fn=lambda device: next(
+            (
+                fw["version"]
+                for fw in device.deviceProp.get("firmwareInfos", [])
+                if fw.get("isMainFw")
+            ),
+            None,
+        ),
     ),
     PawsyncSensorEntityDescription(
         key="mcu_fw_version",
         name="MCU firmware version",
         icon="mdi:cpu-64-bit",
-        value_fn=lambda device: next((fw["version"] for fw in device.deviceProp.get("firmwareInfos", []) if fw.get("pluginName") == "mcuFw"), None),
+        value_fn=lambda device: next(
+            (
+                fw["version"]
+                for fw in device.deviceProp.get("firmwareInfos", [])
+                if fw.get("pluginName") == "mcuFw"
+            ),
+            None,
+        ),
     ),
 )
 
@@ -113,12 +140,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up Pawsync sensor entities from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id][PAWSYNC_COORDINATOR]
-    
+
     entities = []
     for device in coordinator.data or []:
         for description in SENSOR_TYPES:
             entities.append(PawsyncDeviceSensor(coordinator, device, description))
-    
+
     async_add_entities(entities)
 
 
@@ -127,7 +154,12 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
 
     entity_description: PawsyncSensorEntityDescription
 
-    def __init__(self, coordinator, device: pawsync.Device, description: PawsyncSensorEntityDescription):
+    def __init__(
+        self,
+        coordinator,
+        device: pawsync.Device,
+        description: PawsyncSensorEntityDescription,
+    ):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.device = device
@@ -158,12 +190,12 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
             }
 
     @property
-    def available(self) -> bool: # pyright: ignore[reportIncompatibleVariableOverride]
+    def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return if entity is available."""
         return self.coordinator.last_update_success
 
     @property
-    def device_info(self): # pyright: ignore[reportIncompatibleVariableOverride]
+    def device_info(self):  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self.device.deviceId)},
@@ -198,7 +230,7 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
         super()._handle_coordinator_update()
 
     @property
-    def native_value(self) -> Any: # pyright: ignore[reportIncompatibleVariableOverride]
+    def native_value(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return the state of the sensor."""
         if self.entity_description.value_fn:
             return self.entity_description.value_fn(self.device)

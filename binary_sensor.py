@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -25,6 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class PawsyncBinarySensorEntityDescription(BinarySensorEntityDescription):
     """Class describing Pawsync binary sensor entities."""
+
     value_fn: Callable[[pawsync.Device], Any] | None = None
 
 
@@ -77,7 +79,12 @@ class PawsyncDeviceBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     entity_description: PawsyncBinarySensorEntityDescription
 
-    def __init__(self, coordinator, device: pawsync.Device, description: PawsyncBinarySensorEntityDescription):
+    def __init__(
+        self,
+        coordinator,
+        device: pawsync.Device,
+        description: PawsyncBinarySensorEntityDescription,
+    ):
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         self.device = device
@@ -91,12 +98,12 @@ class PawsyncDeviceBinarySensor(CoordinatorEntity, BinarySensorEntity):
         }
 
     @property
-    def available(self) -> bool: # pyright: ignore[reportIncompatibleVariableOverride]
+    def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return if entity is available."""
         return self.coordinator.last_update_success
 
     @property
-    def device_info(self): # pyright: ignore[reportIncompatibleVariableOverride]
+    def device_info(self):  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self.device.deviceId)},
@@ -116,7 +123,7 @@ class PawsyncDeviceBinarySensor(CoordinatorEntity, BinarySensorEntity):
         super()._handle_coordinator_update()
 
     @property
-    def is_on(self) -> bool | None: # pyright: ignore[reportIncompatibleVariableOverride]
+    def is_on(self) -> bool | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Return true if the binary sensor is on."""
         if self.entity_description.value_fn:
             return self.entity_description.value_fn(self.device)
