@@ -17,10 +17,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install dependencies
-        run: |
-          pip install ruff
-          pip install -r requirements-dev.txt
-          pip install aiohttp
+        run: pip install -r requirements-dev.txt
       - name: Run Ruff check
         run: ruff check .
       - name: Run Ruff format
