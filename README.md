@@ -43,6 +43,33 @@ data:
   amount: 12
 ```
 
+## Development
+
+To set up the development environment, run the setup script:
+
+```bash
+./scripts/dev-setup.sh
+```
+
+This script installs Python 3, pip, venv, creates a local virtual environment (`.venv`), and installs development dependencies from `requirements-dev.txt`.
+
+### Linting and Formatting
+
+We use Ruff to maintain code quality. To run checks and format the codebase, activate the virtual environment first:
+
+```bash
+source .venv/bin/activate
+ruff check .
+ruff format .
+```
+
+Alternatively, you can run them directly without activating the virtual environment:
+
+```bash
+.venv/bin/ruff check .
+.venv/bin/ruff format .
+```
+
 ## License
 
 MIT
