@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import types
 from dataclasses import dataclass
@@ -12,8 +13,10 @@ class MockModule(MagicMock):
         return "mock"
 
 
-# Create custom_components namespace
-sys.modules["custom_components"] = MockModule()
+# Create custom_components namespace as a real package module
+cc_module = types.ModuleType("custom_components")
+cc_module.__path__ = []
+sys.modules["custom_components"] = cc_module
 
 # Create homeassistant structure as real package modules so subpackages resolve correctly
 ha_module = types.ModuleType("homeassistant")
@@ -179,45 +182,50 @@ bsensor_mod.BinarySensorEntityDescription = BinarySensorEntityDescription
 bsensor_mod.BinarySensorDeviceClass = BinarySensorDeviceClass
 sys.modules["homeassistant.components.binary_sensor"] = bsensor_mod
 
-# Setup custom_components.pawsync namespace
+# Get absolute path to the root directory
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Setup custom_components.pawsync namespace using absolute paths
 # Define custom_components.pawsync (from __init__.py)
 pawsync_init_spec = importlib.util.spec_from_file_location(
-    "custom_components.pawsync", "__init__.py"
+    "custom_components.pawsync", os.path.join(ROOT_DIR, "__init__.py")
 )
 pawsync_init_mod = importlib.util.module_from_spec(pawsync_init_spec)
 sys.modules["custom_components.pawsync"] = pawsync_init_mod
+sys.modules["__init__"] = pawsync_init_mod
 
 # Define custom_components.pawsync.pawsync
 pawsync_spec = importlib.util.spec_from_file_location(
-    "custom_components.pawsync.pawsync", "pawsync.py"
+    "custom_components.pawsync.pawsync", os.path.join(ROOT_DIR, "pawsync.py")
 )
 pawsync_mod = importlib.util.module_from_spec(pawsync_spec)
 sys.modules["custom_components.pawsync.pawsync"] = pawsync_mod
 
 # Define custom_components.pawsync.const
 const_spec = importlib.util.spec_from_file_location(
-    "custom_components.pawsync.const", "const.py"
+    "custom_components.pawsync.const", os.path.join(ROOT_DIR, "const.py")
 )
 const_mod = importlib.util.module_from_spec(const_spec)
 sys.modules["custom_components.pawsync.const"] = const_mod
 
 # Define custom_components.pawsync.config_flow
 cf_spec = importlib.util.spec_from_file_location(
-    "custom_components.pawsync.config_flow", "config_flow.py"
+    "custom_components.pawsync.config_flow", os.path.join(ROOT_DIR, "config_flow.py")
 )
 cf_mod = importlib.util.module_from_spec(cf_spec)
 sys.modules["custom_components.pawsync.config_flow"] = cf_mod
 
 # Define custom_components.pawsync.sensor
 sensor_spec = importlib.util.spec_from_file_location(
-    "custom_components.pawsync.sensor", "sensor.py"
+    "custom_components.pawsync.sensor", os.path.join(ROOT_DIR, "sensor.py")
 )
 sensor_mod_impl = importlib.util.module_from_spec(sensor_spec)
 sys.modules["custom_components.pawsync.sensor"] = sensor_mod_impl
 
 # Define custom_components.pawsync.binary_sensor
 bsensor_spec = importlib.util.spec_from_file_location(
-    "custom_components.pawsync.binary_sensor", "binary_sensor.py"
+    "custom_components.pawsync.binary_sensor",
+    os.path.join(ROOT_DIR, "binary_sensor.py"),
 )
 bsensor_mod_impl = importlib.util.module_from_spec(bsensor_spec)
 sys.modules["custom_components.pawsync.binary_sensor"] = bsensor_mod_impl
@@ -229,3 +237,14 @@ pawsync_init_spec.loader.exec_module(pawsync_init_mod)
 cf_spec.loader.exec_module(cf_mod)
 sensor_spec.loader.exec_module(sensor_mod_impl)
 bsensor_spec.loader.exec_module(bsensor_mod_impl)
+
+# Prevent pytest from collecting or importing root integration files
+collect_ignore = [
+    "../__init__.py",
+    "../pawsync.py",
+    "../sensor.py",
+    "../binary_sensor.py",
+    "../config_flow.py",
+    "../const.py",
+    "../device_registry.py",
+]

@@ -26,4 +26,6 @@ jobs:
         run: ruff format --check .
       - name: Run unit tests
         run: |
-          PYTHONPATH=. pytest tests/
+          cd tests
+          PYTHONPATH=.. pytest --import-mode=importlib
+
