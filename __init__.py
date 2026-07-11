@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import timedelta
 
 import aiohttp
@@ -11,34 +10,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
 from . import pawsync
-from .const import DOMAIN, PAWSYNC_COORDINATOR, PLATFORMS
+from .const import DOMAIN, PAWSYNC_COORDINATOR, PLATFORMS, TOKEN_INVALID_CODE
 
 logger = logging.getLogger(__name__)
-
-STORE_VERSION = 1
-STORAGE_KEY = "pawsync_terminal_id"
-
-
-async def async_get_or_create_terminal_id(hass: HomeAssistant, entry_id: str) -> str:
-    store = Store(hass, STORE_VERSION, STORAGE_KEY)
-    data = await store.async_load()
-    if data is None:
-        data = {}
-
-    terminal_id = data.get(entry_id)
-    if terminal_id is None:
-        terminal_id = str(uuid.uuid1()).replace("-", "")[-33:]
-        data[entry_id] = terminal_id
-        await store.async_save(data)
-
-    return terminal_id
 
 
 # Validation of the user's configuration
@@ -94,7 +74,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             return
 
         amount = call.data.get("amount")
-        await device.requestFeed(session, amount)
+        response = await device.requestFeed(session, amount)
+        resp_json = await response.json()
+        if resp_json.get("code") == TOKEN_INVALID_CODE:
+            logger.warning("Feed service: token expired, re-authenticating")
+            re_login = next(
+                (
+                    v["re_login"]
+                    for v in hass.data.get(DOMAIN, {}).values()
+                    if isinstance(v, dict) and "re_login" in v
+                ),
+                None,
+            )
+            if re_login:
+                await re_login()
+            response = await device.requestFeed(session, amount)
+            resp_json = await response.json()
+        if resp_json.get("code") != 0:
+            logger.error(f"Feed failed for device {device_id}: {resp_json}")
 
     # Service schema: accept an entity id (a Pawsync device entity) and amount
     SERVICE_FEED_SCHEMA = vol.Schema(
@@ -116,15 +113,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     password = entry.data[CONF_PASSWORD]
 
     session = async_get_clientsession(hass)
-    terminal_id = await async_get_or_create_terminal_id(hass, entry.entry_id)
 
-    await pawsync.login(session, username, password, terminal_id=terminal_id)
+    await pawsync.login(session, username, password)
 
     async def async_update():
         devices = await pawsync.getDeviceList(session, logger)
 
         if not devices:
-            await pawsync.login(session, username, password, terminal_id=terminal_id)
+            await pawsync.login(session, username, password)
             devices = await pawsync.getDeviceList(session, logger)
 
             if not devices:
@@ -146,9 +142,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_config_entry_first_refresh()
 
+    async def re_login():
+        await pawsync.login(session, username, password)
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         PAWSYNC_COORDINATOR: coordinator,
+        "re_login": re_login,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

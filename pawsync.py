@@ -52,7 +52,7 @@ async def login(
     terminal_id: str | None = None,
 ):
     if terminal_id is None:
-        terminal_id = str(uuid.uuid1()).replace("-", "")[-33:]
+        terminal_id = hashlib.sha256(email.encode("utf-8")).hexdigest()[:32]
 
     context["terminalId"] = terminal_id
     r = await request_post(

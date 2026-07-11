@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
@@ -62,6 +63,28 @@ async def test_login_failed():
     assert res is None
     assert "accountID" not in context
     assert "token" not in context
+
+
+@pytest.mark.asyncio
+async def test_login_stable_terminal_id():
+    session = MagicMock()
+    mock_response = MagicMock()
+    mock_response.json = AsyncMock(
+        return_value={
+            "code": 0,
+            "result": {"accountId": "acc_123", "token": "token_abc"},
+        }
+    )
+    session.post = AsyncMock(return_value=mock_response)
+
+    original_terminal_id = context.get("terminalId")
+    try:
+        await login(session, "test@example.com", "password123")
+        expected_terminal_id = hashlib.sha256(b"test@example.com").hexdigest()[:32]
+        assert context["terminalId"] == expected_terminal_id
+    finally:
+        if original_terminal_id is not None:
+            context["terminalId"] = original_terminal_id
 
 
 @pytest.mark.asyncio
