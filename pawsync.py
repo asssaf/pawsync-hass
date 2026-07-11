@@ -132,6 +132,25 @@ class Device:
         logger.debug("Requesting feed for device %s, amount=%s", self.deviceId, amount)
         return await self._send_bypass(session, "manualFeeding", {"serving1": amount})
 
+    async def getStatus(
+        self, session: aiohttp.ClientSession, logger: logging.Logger
+    ) -> dict:
+        """Fetch real-time device state via getPetDeviceStatus."""
+        response = await self._send_bypass(session, "getPetDeviceStatus")
+        result = await response.json()
+        if result.get("code") != 0:
+            logger.error("getPetDeviceStatus failed for %s: %s", self.deviceId, result)
+            return {}
+        inner = result.get("result") or {}
+        if inner.get("code") != 0:
+            logger.error(
+                "getPetDeviceStatus inner error for %s: %s",
+                self.deviceId,
+                inner,
+            )
+            return {}
+        return inner.get("result") or {}
+
 
 async def getDeviceList(session: aiohttp.ClientSession, logger: logging.Logger):
     r = await request_post(session, "deviceManaged", "deviceList4Pet", {})

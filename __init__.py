@@ -130,6 +130,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             sessions[d.deviceId] = session
             all_devices[d.deviceId] = d
 
+        for d in devices:
+            status = await d.getStatus(session, logger)
+            if status:
+                d.deviceProp.update(status)
+
         pet_logs = {}
         for d in devices:
             pet_logs[d.deviceId] = await pawsync.getPetLogList(
