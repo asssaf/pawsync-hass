@@ -91,8 +91,14 @@ class Device:
         self.deviceProp = d["deviceProp"]
         self.terminalId = context["terminalId"]
 
-    async def requestFeed(self, session: aiohttp.ClientSession, amount: int):
-        json = {
+    async def _send_bypass(
+        self,
+        session: aiohttp.ClientSession,
+        method: str,
+        data: dict | None = None,
+    ) -> aiohttp.ClientResponse:
+        """Send a device command via the bypassV2 envelope."""
+        payload = {
             "acceptLanguage": "en",
             "accountID": context["accountID"],
             "appID": context["appID"],
@@ -109,19 +115,22 @@ class Device:
             "configModule": self.configModel,
             "payload": {
                 "data": {
-                    "serving1": amount,
+                    **(data or {}),
                     "cid": self.deviceId,
                     "configModule": self.configModel,
                 },
-                "method": "manualFeeding",
+                "method": method,
                 "source": "APP",
             },
         }
-        print(json)
-
         return await session.post(
-            "https://smartapi.pawsync.com/pet/api/deviceManaged/v1/bypassV2", json=json
+            "https://smartapi.pawsync.com/pet/api/deviceManaged/v1/bypassV2",
+            json=payload,
         )
+
+    async def requestFeed(self, session: aiohttp.ClientSession, amount: int):
+        logger.debug("Requesting feed for device %s, amount=%s", self.deviceId, amount)
+        return await self._send_bypass(session, "manualFeeding", {"serving1": amount})
 
 
 async def getDeviceList(session: aiohttp.ClientSession, logger: logging.Logger):
