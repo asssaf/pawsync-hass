@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 
 import aiohttp
@@ -92,6 +93,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             resp_json = await response.json()
         if resp_json.get("code") != 0:
             logger.error(f"Feed failed for device {device_id}: {resp_json}")
+        else:
+            for entry_data in hass.data.get(DOMAIN, {}).values():
+                if isinstance(entry_data, dict) and PAWSYNC_COORDINATOR in entry_data:
+                    coord = entry_data[PAWSYNC_COORDINATOR]
+                    devices = (coord.data or {}).get("devices", [])
+                    if any(d.deviceId == device_id for d in devices):
+                        coord.fast_polling_until = time.time() + 600
+                        coord.update_interval = timedelta(seconds=30)
+                        hass.async_create_task(coord.async_request_refresh())
+                        break
 
     # Service schema: accept an entity id (a Pawsync device entity) and amount
     SERVICE_FEED_SCHEMA = vol.Schema(
@@ -117,6 +128,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await pawsync.login(session, username, password)
 
     async def async_update():
+        if (
+            coordinator.fast_polling_until is not None
+            and time.time() > coordinator.fast_polling_until
+        ):
+            coordinator.update_interval = timedelta(minutes=15)
+            coordinator.fast_polling_until = None
+
         devices = await pawsync.getDeviceList(session, logger)
 
         if not devices:
@@ -151,6 +169,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_method=async_update,
         config_entry=entry,
     )
+    coordinator.fast_polling_until = None
     await coordinator.async_config_entry_first_refresh()
 
     async def re_login():
