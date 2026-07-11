@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -133,6 +134,91 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class PawsyncLogSensorEntityDescription(SensorEntityDescription):
+    """Class describing Pawsync log sensor entities."""
+
+    log_fn: Callable[[list], Any] | None = None
+
+
+LOG_SENSOR_TYPES: tuple[PawsyncLogSensorEntityDescription, ...] = (
+    PawsyncLogSensorEntityDescription(
+        key="last_dispensed_time",
+        name="Last dispensed time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-check",
+        log_fn=lambda logs: next(
+            (
+                datetime.fromtimestamp(e["timestamp"], tz=UTC)
+                for e in logs
+                if e["logType"] in ("planFeeding", "manualFeeding")
+            ),
+            None,
+        ),
+    ),
+    PawsyncLogSensorEntityDescription(
+        key="last_dispensed_amount",
+        name="Last dispensed amount",
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:shaker-outline",
+        log_fn=lambda logs: next(
+            (
+                e["value"]
+                for e in logs
+                if e["logType"] in ("planFeeding", "manualFeeding")
+                and e.get("value") is not None
+            ),
+            None,
+        ),
+    ),
+    PawsyncLogSensorEntityDescription(
+        key="last_eaten_time",
+        name="Last eaten time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:cat",
+        log_fn=lambda logs: next(
+            (
+                datetime.fromtimestamp(e["timestamp"], tz=UTC)
+                for e in logs
+                if e["logType"] == "takeFood"
+            ),
+            None,
+        ),
+    ),
+    PawsyncLogSensorEntityDescription(
+        key="last_eaten_amount",
+        name="Last eaten amount",
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:food-variant",
+        log_fn=lambda logs: next(
+            (
+                e["value"]
+                for e in logs
+                if e["logType"] == "takeFood" and e.get("value") is not None
+            ),
+            None,
+        ),
+    ),
+    PawsyncLogSensorEntityDescription(
+        key="last_eating_duration",
+        name="Last eating duration",
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:timer",
+        log_fn=lambda logs: next(
+            (
+                e["durationInS"]
+                for e in logs
+                if e["logType"] == "takeFood" and e.get("durationInS", -1) > 0
+            ),
+            None,
+        ),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -142,9 +228,17 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id][PAWSYNC_COORDINATOR]
 
     entities = []
-    for device in coordinator.data or []:
+    devices = (coordinator.data or {}).get("devices", [])
+    pet_logs = (coordinator.data or {}).get("pet_logs", {})
+
+    for device in devices:
         for description in SENSOR_TYPES:
             entities.append(PawsyncDeviceSensor(coordinator, device, description))
+
+    for device in devices:
+        logs = pet_logs.get(device.deviceId, [])
+        for description in LOG_SENSOR_TYPES:
+            entities.append(PawsyncLogSensor(coordinator, device, description, logs))
 
     async_add_entities(entities)
 
@@ -208,7 +302,8 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        for device in self.coordinator.data or []:
+        devices = (self.coordinator.data or {}).get("devices", [])
+        for device in devices:
             if device.deviceId == self.device.deviceId:
                 self.device = device
                 # If primary, refresh all attributes
@@ -235,3 +330,61 @@ class PawsyncDeviceSensor(CoordinatorEntity, SensorEntity):
         if self.entity_description.value_fn:
             return self.entity_description.value_fn(self.device)
         return None
+
+
+class PawsyncLogSensor(CoordinatorEntity, SensorEntity):
+    """Representation of Pawsync pet log activity as a sensor."""
+
+    entity_description: PawsyncLogSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator,
+        device: pawsync.Device,
+        description: PawsyncLogSensorEntityDescription,
+        logs: list,
+    ):
+        """Initialize the log sensor."""
+        super().__init__(coordinator)
+        self._device_id = device.deviceId
+        self._logs = logs
+        self.entity_description = description
+        self._attr_unique_id = f"pawsync_{device.deviceId}_{description.key}"
+        self._attr_name = f"{device.deviceName} {description.name}"
+        self._attr_extra_state_attributes = {"device_id": device.deviceId}
+        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._logs = (
+            (self.coordinator.data or {}).get("pet_logs", {}).get(self._device_id, [])
+        )
+        super()._handle_coordinator_update()
+
+    @property
+    def available(self) -> bool:  # pyright: ignore[reportIncompatibleVariableOverride]
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+    @property
+    def device_info(self):  # pyright: ignore[reportIncompatibleVariableOverride]
+        """Return device information."""
+        devices = (self.coordinator.data or {}).get("devices", [])
+        d = next((d for d in devices if d.deviceId == self._device_id), None)
+        if d is None:
+            return None
+        return {
+            "identifiers": {(DOMAIN, d.deviceId)},
+            "name": d.deviceName,
+            "model": d.deviceModel,
+            "manufacturer": "Pawsync",
+            "hw_version": d.configModel,
+        }
+
+    @property
+    def native_value(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
+        """Return the state of the sensor."""
+        if not self.entity_description.log_fn:
+            return None
+        return self.entity_description.log_fn(self._logs)
