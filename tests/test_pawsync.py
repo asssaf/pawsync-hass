@@ -170,6 +170,74 @@ async def test_device_request_feed():
 
 
 @pytest.mark.asyncio
+async def test_device_get_status_success():
+    session = MagicMock()
+    mock_response = MagicMock()
+    mock_response.json = AsyncMock(
+        return_value={
+            "code": 0,
+            "result": {
+                "code": 0,
+                "result": {"bowlWeight": 10, "desiccantRemainTime": 30},
+            },
+        }
+    )
+    session.post = AsyncMock(return_value=mock_response)
+    logger = logging.getLogger("test_logger")
+
+    data = {
+        "deviceName": "Feeder 1",
+        "deviceImg": "img_url",
+        "deviceDefaultImg": "default_url",
+        "deviceId": "id123",
+        "connectionType": "wifi",
+        "secondaryCategory": "feeder",
+        "deviceModel": "model_x",
+        "configModel": "config_y",
+        "bizId": "biz123",
+        "petId": "pet123",
+        "deviceProp": {},
+    }
+    context["accountID"] = "acc_123"
+    context["token"] = "token_abc"
+
+    device = Device(data)
+    status = await device.getStatus(session, logger)
+    assert status == {"bowlWeight": 10, "desiccantRemainTime": 30}
+    session.post.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_device_get_status_failed():
+    session = MagicMock()
+    mock_response = MagicMock()
+    mock_response.json = AsyncMock(return_value={"code": -1})
+    session.post = MagicMock()
+    session.post = AsyncMock(return_value=mock_response)
+    logger = logging.getLogger("test_logger")
+
+    data = {
+        "deviceName": "Feeder 1",
+        "deviceImg": "img_url",
+        "deviceDefaultImg": "default_url",
+        "deviceId": "id123",
+        "connectionType": "wifi",
+        "secondaryCategory": "feeder",
+        "deviceModel": "model_x",
+        "configModel": "config_y",
+        "bizId": "biz123",
+        "petId": "pet123",
+        "deviceProp": {},
+    }
+    context["accountID"] = "acc_123"
+    context["token"] = "token_abc"
+
+    device = Device(data)
+    status = await device.getStatus(session, logger)
+    assert status == {}
+
+
+@pytest.mark.asyncio
 async def test_get_pet_log_list_success():
     session = MagicMock()
     mock_response = MagicMock()

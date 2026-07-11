@@ -25,6 +25,7 @@ def test_sensors():
         "deviceProp": {
             "connectionStatus": "online",
             "contentInPot": 250,
+            "bowlWeight": 5,
             "petFood": {
                 "bucketSurplus": 1500,
                 "lastFeedingAmount": 12,
@@ -47,14 +48,15 @@ def test_sensors():
 
     assert sensors[0].native_value == "online"
     assert sensors[1].native_value == 250
-    assert sensors[2].native_value == 1500
-    assert sensors[3].native_value == 12
-    assert sensors[4].native_value == 5
-    assert sensors[5].native_value == 85
-    assert sensors[6].native_value == -60
-    assert sensors[7].native_value == 0
-    assert sensors[8].native_value == "1.0.85"
-    assert sensors[9].native_value == "mcu_1.0"
+    assert sensors[2].native_value == 5
+    assert sensors[3].native_value == 1500
+    assert sensors[4].native_value == 12
+    assert sensors[5].native_value == 5
+    assert sensors[6].native_value == 85
+    assert sensors[7].native_value == -60
+    assert sensors[8].native_value == 0
+    assert sensors[9].native_value == "1.0.85"
+    assert sensors[10].native_value == "mcu_1.0"
 
     assert sensors[0]._attr_extra_state_attributes["device_id"] == "id123"
     assert sensors[0]._attr_extra_state_attributes["device_name"] == "Feeder 1"

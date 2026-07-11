@@ -53,6 +53,14 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
         value_fn=lambda device: device.deviceProp.get("contentInPot"),
     ),
     PawsyncSensorEntityDescription(
+        key="bowl_weight",
+        name="Food in bowl",
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:bowl-mix",
+        value_fn=lambda device: device.deviceProp.get("bowlWeight"),
+    ),
+    PawsyncSensorEntityDescription(
         key="bucket_surplus",
         name="Bucket surplus",
         native_unit_of_measurement=UnitOfMass.GRAMS,
