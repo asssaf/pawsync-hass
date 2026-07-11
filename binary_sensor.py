@@ -55,6 +55,16 @@ BINARY_SENSOR_TYPES: tuple[PawsyncBinarySensorEntityDescription, ...] = (
         icon="mdi:target",
         value_fn=lambda device: device.deviceProp.get("accurateFeeding") == 1,
     ),
+    PawsyncBinarySensorEntityDescription(
+        key="bowl_missing",
+        name="Food bowl",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        value_fn=lambda device: (
+            device.deviceProp.get("bowlConnected") != "normal"
+            if device.deviceProp.get("bowlConnected") is not None
+            else None
+        ),
+    ),
 )
 
 
