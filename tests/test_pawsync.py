@@ -3,7 +3,13 @@ import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from custom_components.pawsync.pawsync import Device, context, getDeviceList, login
+from custom_components.pawsync.pawsync import (
+    Device,
+    context,
+    getDeviceList,
+    getPetLogList,
+    login,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -161,3 +167,38 @@ async def test_device_request_feed():
     res = await device.requestFeed(session, 15)
     assert res == mock_response
     session.post.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_pet_log_list_success():
+    session = MagicMock()
+    mock_response = MagicMock()
+    mock_response.json = AsyncMock(
+        return_value={
+            "code": 0,
+            "result": {
+                "petLogList": [
+                    {"timestamp": 1234567890, "logType": "planFeeding", "value": 11}
+                ]
+            },
+        }
+    )
+    session.post = AsyncMock(return_value=mock_response)
+    logger = logging.getLogger("test_logger")
+
+    logs = await getPetLogList(session, "device_123", logger)
+    assert len(logs) == 1
+    assert logs[0]["logType"] == "planFeeding"
+    assert logs[0]["value"] == 11
+
+
+@pytest.mark.asyncio
+async def test_get_pet_log_list_failed():
+    session = MagicMock()
+    mock_response = MagicMock()
+    mock_response.json = AsyncMock(return_value={"code": -1, "result": None})
+    session.post = AsyncMock(return_value=mock_response)
+    logger = logging.getLogger("test_logger")
+
+    logs = await getPetLogList(session, "device_123", logger)
+    assert logs == []

@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import logging
 import random
+import time
 import uuid
 from copy import deepcopy
 
@@ -132,6 +133,34 @@ async def getDeviceList(session: aiohttp.ClientSession, logger: logging.Logger):
         return None
     devices = devicesJson["result"]["list"]
     return [Device(d) for d in devices]
+
+
+async def getPetLogList(
+    session: aiohttp.ClientSession,
+    device_id: str,
+    logger: logging.Logger,
+    page_size: int = 50,
+) -> list:
+    """Fetch feeding activity logs for the last 24 hours."""
+    end_ts = int(time.time())
+    start_ts = end_ts - 86400  # last 24 hours
+    r = await request_post(
+        session,
+        "petDeviceManaged",
+        "getPetLogList",
+        {
+            "deviceId": device_id,
+            "endTimestamp": end_ts,
+            "objectType": 0,
+            "pageSize": page_size,
+            "startTimestamp": start_ts,
+        },
+    )
+    result = await r.json()
+    if result["code"] != 0 or result["result"] is None:
+        logger.error("getPetLogList failed for %s: %s", device_id, result)
+        return []
+    return result["result"].get("petLogList", [])
 
 
 if __name__ == "__main__":

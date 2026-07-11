@@ -67,7 +67,8 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id][PAWSYNC_COORDINATOR]
 
     entities = []
-    for device in coordinator.data or []:
+    devices = (coordinator.data or {}).get("devices", [])
+    for device in devices:
         for description in BINARY_SENSOR_TYPES:
             entities.append(PawsyncDeviceBinarySensor(coordinator, device, description))
 
@@ -116,7 +117,8 @@ class PawsyncDeviceBinarySensor(CoordinatorEntity, BinarySensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        for device in self.coordinator.data or []:
+        devices = (self.coordinator.data or {}).get("devices", [])
+        for device in devices:
             if device.deviceId == self.device.deviceId:
                 self.device = device
                 break

@@ -63,6 +63,7 @@ class UnitOfMass:
 
 class UnitOfTime:
     DAYS = "d"
+    SECONDS = "s"
 
 
 const_mod.UnitOfMass = UnitOfMass
@@ -145,6 +146,7 @@ class SensorEntityDescription:
 class SensorDeviceClass:
     BATTERY = "battery"
     SIGNAL_STRENGTH = "signal_strength"
+    TIMESTAMP = "timestamp"
 
 
 class SensorStateClass:
