@@ -177,6 +177,7 @@ class BinarySensorEntityDescription:
 
 class BinarySensorDeviceClass:
     POWER = "power"
+    PROBLEM = "problem"
 
 
 bsensor_mod.BinarySensorEntity = BinarySensorEntity

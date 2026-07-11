@@ -24,6 +24,7 @@ def test_binary_sensors():
             "intelligentFeedingSwitch": 0,
             "slowFeedSwitch": 1,
             "accurateFeeding": 0,
+            "bowlConnected": "abnormal",
         },
     }
     device = Device(device_data)
@@ -39,3 +40,4 @@ def test_binary_sensors():
     assert sensors[1].is_on is False
     assert sensors[2].is_on is True
     assert sensors[3].is_on is False
+    assert sensors[4].is_on is True
