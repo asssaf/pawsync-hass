@@ -99,8 +99,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     coord = entry_data[PAWSYNC_COORDINATOR]
                     devices = (coord.data or {}).get("devices", [])
                     if any(d.deviceId == device_id for d in devices):
-                        coord.fast_polling_until = time.time() + 600
-                        coord.update_interval = timedelta(seconds=30)
+                        coord.fast_polling_until = time.time() + 300
+                        coord.update_interval = timedelta(seconds=15)
                         hass.async_create_task(coord.async_request_refresh())
                         break
 

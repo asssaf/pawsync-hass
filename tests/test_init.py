@@ -166,8 +166,8 @@ async def test_handle_feed_fast_polling():
         await handle_feed(call)
 
         assert mock_coord.fast_polling_until is not None
-        assert mock_coord.fast_polling_until > time.time() + 590
-        assert mock_coord.update_interval == timedelta(seconds=30)
+        assert mock_coord.fast_polling_until > time.time() + 290
+        assert mock_coord.update_interval == timedelta(seconds=15)
         mock_coord.async_request_refresh.assert_called_once()
         hass.async_create_task.assert_called_once()
         # Close the unawaited coroutine mock to avoid RuntimeWarning
@@ -226,8 +226,8 @@ async def test_async_update_fast_polling_revert():
             assert mock_coord.fast_polling_until is None
 
         # Test case 2: Fast polling active, not expired
-        mock_coord.fast_polling_until = time.time() + 600
-        mock_coord.update_interval = timedelta(seconds=30)
+        mock_coord.fast_polling_until = time.time() + 300
+        mock_coord.update_interval = timedelta(seconds=15)
 
         with patch(
             "custom_components.pawsync.pawsync.getPetLogList",
@@ -236,12 +236,12 @@ async def test_async_update_fast_polling_revert():
             mock_logs.return_value = []
             await async_update()
 
-            assert mock_coord.update_interval == timedelta(seconds=30)
+            assert mock_coord.update_interval == timedelta(seconds=15)
             assert mock_coord.fast_polling_until is not None
 
         # Test case 3: Fast polling active and expired
         mock_coord.fast_polling_until = time.time() - 10
-        mock_coord.update_interval = timedelta(seconds=30)
+        mock_coord.update_interval = timedelta(seconds=15)
 
         with patch(
             "custom_components.pawsync.pawsync.getPetLogList",
