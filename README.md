@@ -9,8 +9,20 @@ This custom integration allows you to connect your Pawsync pet feeder devices to
 
 ## Installation
 
-1. Copy the `pawsync` directory into your Home Assistant `custom_components` folder.
-2. Restart Home Assistant.
+### Method 1: HACS (Recommended)
+
+1. Open **HACS** in Home Assistant.
+2. Click the three dots in the top right corner and select **Custom repositories**.
+3. Paste the URL of this repository (`https://github.com/asssaf/pawsync-hass`) into the **Repository** field.
+4. Select **Integration** as the Category and click **Add**.
+5. Click **Download** on the newly added integration card.
+6. Restart Home Assistant.
+
+### Method 2: Manual Installation
+
+1. Create a directory named `pawsync` inside your Home Assistant `custom_components` folder.
+2. Copy all the files from this repository (except for `tests`, `.github`, and `.venv` related files) into that `custom_components/pawsync/` folder.
+3. Restart Home Assistant.
 
 ## Configuration
 
