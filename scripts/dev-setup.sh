@@ -35,19 +35,7 @@ eval "$(mise env -s bash)"
 # Avoid warning about hardlinks if cache and target are on different filesystems
 export UV_LINK_MODE=copy
 
-if [ -d ".venv" ]; then
-    # Check the Python version of the existing virtual environment
-    VENV_PYTHON_VERSION=$(".venv/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")
-    if [ "$VENV_PYTHON_VERSION" != "3.14" ]; then
-        echo "==> Existing .venv has Python $VENV_PYTHON_VERSION. Re-creating with Python 3.14..."
-        uv venv --python 3.14 --clear .venv
-    else
-        echo "==> Virtual environment (.venv) already exists with Python 3.14."
-    fi
-else
-    echo "==> Creating virtual environment (.venv) with Python 3.14..."
-    uv venv --python 3.14 .venv
-fi
+# This automatically creates and/or sources the .venv directory thanks to python.uv_venv_auto settings in mise.toml
 
 echo "==> Installing development requirements..."
 uv pip install -r requirements-dev.txt
