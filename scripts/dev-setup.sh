@@ -37,7 +37,7 @@ eval "$(mise env -s bash)"
 # This automatically creates and/or sources the .venv directory thanks to python.uv_venv_auto settings in mise.toml
 
 echo "==> Installing development requirements..."
-uv pip install -r requirements-dev.txt
+mise run setup
 
 echo "==> Dev setup completed successfully!"
 echo "==> To activate the environment, run: source .venv/bin/activate"

@@ -7,3 +7,7 @@ python.uv_venv_auto = "create|source"
 
 [env]
 UV_LINK_MODE = "symlink"
+
+[tasks.setup]
+description = "Install development requirements"
+run = "uv pip install -r requirements-dev.txt"
