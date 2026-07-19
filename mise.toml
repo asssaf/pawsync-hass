@@ -4,3 +4,6 @@ uv = "latest"
 
 [settings]
 python.uv_venv_auto = "create|source"
+
+[env]
+UV_LINK_MODE = "symlink"
