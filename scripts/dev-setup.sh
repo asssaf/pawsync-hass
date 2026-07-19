@@ -33,7 +33,7 @@ fi
 eval "$(mise env -s bash)"
 
 # Avoid warning about hardlinks if cache and target are on different filesystems
-export UV_LINK_MODE=copy
+export UV_LINK_MODE=symlink
 
 # This automatically creates and/or sources the .venv directory thanks to python.uv_venv_auto settings in mise.toml
 
