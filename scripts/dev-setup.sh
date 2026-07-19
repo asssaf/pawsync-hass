@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-#!/usr/bin/env bash
-
 # Project development environment setup script using Mise.
 # Sourced by entrypoint.sh on container startup when AGY_STARTUP_HOOK is configured.
 
@@ -34,20 +32,8 @@ fi
 # 3. Export environment variables for the current shell session
 eval "$(mise env -s bash)"
 
-
 # Avoid warning about hardlinks if cache and target are on different filesystems
 export UV_LINK_MODE=copy
-
-# Check if uv is installed
-if ! command -v uv &> /dev/null && [ ! -f "$HOME/.local/bin/uv" ]; then
-    echo "==> Installing uv (modern Python package manager)..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-fi
-
-# Ensure uv is in PATH for this script session
-if [ -f "$HOME/.local/bin/uv" ]; then
-    export PATH="$HOME/.local/bin:$PATH"
-fi
 
 if [ -d ".venv" ]; then
     # Check the Python version of the existing virtual environment

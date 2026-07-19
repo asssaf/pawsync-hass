@@ -63,7 +63,7 @@ To set up the development environment, run the setup script:
 ./scripts/dev-setup.sh
 ```
 
-This script installs uv (if not already installed), sets up a local virtual environment (`.venv`) with Python 3.14, and installs development dependencies from `requirements-dev.txt` using uv.
+This script uses `mise` to manage Python 3.14 and `uv`, creates a local virtual environment (`.venv`), and installs development dependencies from `requirements-dev.txt` using uv.
 
 ### Linting and Formatting
 
