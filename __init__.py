@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import aiohttp
 import homeassistant.helpers.config_validation as cv
+import homeassistant.util.dt as dt_util
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -18,6 +19,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from . import pawsync
 from .const import DOMAIN, PAWSYNC_COORDINATOR, PLATFORMS, TOKEN_INVALID_CODE
+from .sensor import _get_next_scheduled_feeding_time
 
 logger = logging.getLogger(__name__)
 
@@ -128,12 +130,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await pawsync.login(session, username, password)
 
     async def async_update():
-        if (
-            coordinator.fast_polling_until is not None
-            and time.time() > coordinator.fast_polling_until
-        ):
-            coordinator.update_interval = timedelta(minutes=15)
-            coordinator.fast_polling_until = None
+        now = dt_util.now()
+        current_time = time.time()
 
         devices = await pawsync.getDeviceList(session, logger)
 
@@ -158,6 +156,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             pet_logs[d.deviceId] = await pawsync.getPetLogList(
                 session, d.deviceId, logger
             )
+
+        # Handle fast polling and adaptive interval calculation
+        if (
+            coordinator.fast_polling_until is not None
+            and current_time <= coordinator.fast_polling_until
+        ):
+            coordinator.update_interval = timedelta(seconds=15)
+        else:
+            coordinator.fast_polling_until = None
+            next_feed_dts = [
+                _get_next_scheduled_feeding_time(d)
+                for d in devices
+                if _get_next_scheduled_feeding_time(d) is not None
+            ]
+            if next_feed_dts:
+                earliest_next_feed = min(next_feed_dts)
+                seconds_to_feed = (earliest_next_feed - now).total_seconds()
+                if seconds_to_feed <= 15:
+                    coordinator.fast_polling_until = current_time + 300
+                    coordinator.update_interval = timedelta(seconds=15)
+                else:
+                    coordinator.update_interval = min(
+                        timedelta(minutes=15),
+                        timedelta(seconds=max(15, seconds_to_feed)),
+                    )
+            else:
+                coordinator.update_interval = timedelta(minutes=15)
 
         return {"devices": devices, "pet_logs": pet_logs}
 

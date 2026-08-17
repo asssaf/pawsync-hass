@@ -1,5 +1,5 @@
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -248,6 +248,101 @@ async def test_async_update_fast_polling_revert():
             new_callable=AsyncMock,
         ) as mock_logs:
             mock_logs.return_value = []
+            await async_update()
+
+            assert mock_coord.update_interval == timedelta(minutes=15)
+            assert mock_coord.fast_polling_until is None
+
+
+@pytest.mark.asyncio
+async def test_async_update_scheduled_feed_adaptive_polling():
+    hass = MagicMock()
+    hass.data = {}
+    hass.config_entries.async_forward_entry_setups = AsyncMock()
+
+    entry = MagicMock()
+    entry.entry_id = "entry_1"
+    entry.data = {"username": "test@example.com", "password": "password123"}
+    entry.options = {}
+
+    with (
+        patch("custom_components.pawsync.pawsync.login", new_callable=AsyncMock),
+        patch(
+            "custom_components.pawsync.pawsync.getDeviceList",
+            new_callable=AsyncMock,
+        ) as mock_devices,
+        patch(
+            "custom_components.pawsync.DataUpdateCoordinator"
+        ) as mock_coordinator_cls,
+        patch("homeassistant.util.dt.now") as mock_now,
+    ):
+        mock_coord = MagicMock()
+        mock_coord.async_config_entry_first_refresh = AsyncMock()
+        mock_coordinator_cls.return_value = mock_coord
+
+        mock_devices.return_value = []
+
+        await async_setup_entry(hass, entry)
+        async_update = mock_coordinator_cls.call_args[1]["update_method"]
+
+        # Monday 10:00:00 (timestamp = 0 sec of hour)
+        monday_dt = datetime(2026, 8, 17, 10, 0, 0, tzinfo=UTC)
+        mock_now.return_value = monday_dt
+
+        device = MagicMock()
+        device.deviceId = "dev_1"
+        device.getStatus = AsyncMock(return_value={})
+        mock_devices.return_value = [device]
+
+        with patch(
+            "custom_components.pawsync.pawsync.getPetLogList",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            # Case 1: Next meal in 5 minutes (10:05:00 = 36300 sec from midnight)
+            device.deviceProp = {
+                "scheduleInfo": {
+                    "planId": 1,
+                    "repeat": 254,
+                    "nextDay": 2,
+                    "nextTime": 36300,
+                    "nextMount": 10,
+                }
+            }
+            mock_coord.fast_polling_until = None
+            await async_update()
+
+            assert mock_coord.update_interval == timedelta(seconds=300)
+            assert mock_coord.fast_polling_until is None
+
+            # Case 2: Next meal right now (10:00:05 = 36005 sec from midnight -> 5s away)
+            device.deviceProp = {
+                "scheduleInfo": {
+                    "planId": 1,
+                    "repeat": 254,
+                    "nextDay": 2,
+                    "nextTime": 36005,
+                    "nextMount": 10,
+                }
+            }
+            mock_coord.fast_polling_until = None
+            await async_update()
+
+            assert mock_coord.update_interval == timedelta(seconds=15)
+            assert mock_coord.fast_polling_until is not None
+            assert mock_coord.fast_polling_until > time.time() + 290
+
+            # Case 3: Next meal 2 hours away (12:00:00 = 43200 sec -> 7200s away)
+            device.deviceProp = {
+                "scheduleInfo": {
+                    "planId": 1,
+                    "repeat": 254,
+                    "nextDay": 2,
+                    "nextTime": 43200,
+                    "nextMount": 10,
+                }
+            }
+            mock_coord.fast_polling_until = None
             await async_update()
 
             assert mock_coord.update_interval == timedelta(minutes=15)

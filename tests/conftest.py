@@ -246,10 +246,10 @@ sys.modules["custom_components.pawsync.binary_sensor"] = bsensor_mod_impl
 # Load / execute them in the correct dependency order
 const_spec.loader.exec_module(const_mod)
 pawsync_spec.loader.exec_module(pawsync_mod)
-pawsync_init_spec.loader.exec_module(pawsync_init_mod)
-cf_spec.loader.exec_module(cf_mod)
 sensor_spec.loader.exec_module(sensor_mod_impl)
 bsensor_spec.loader.exec_module(bsensor_mod_impl)
+cf_spec.loader.exec_module(cf_mod)
+pawsync_init_spec.loader.exec_module(pawsync_init_mod)
 
 # Prevent pytest from collecting or importing root integration files
 collect_ignore = [
