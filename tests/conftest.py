@@ -3,6 +3,7 @@ import os
 import sys
 import types
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 
@@ -30,6 +31,15 @@ sys.modules["homeassistant.helpers"] = helpers_module
 components_module = types.ModuleType("homeassistant.components")
 components_module.__path__ = []
 sys.modules["homeassistant.components"] = components_module
+
+util_module = types.ModuleType("homeassistant.util")
+util_module.__path__ = []
+sys.modules["homeassistant.util"] = util_module
+
+dt_mod = MockModule()
+dt_mod.now = lambda time_zone=None: datetime.now(UTC)
+dt_mod.utcnow = lambda: datetime.now(UTC)
+sys.modules["homeassistant.util.dt"] = dt_mod
 
 # Mock helpers subpackages
 sys.modules["homeassistant.helpers.config_validation"] = MockModule()

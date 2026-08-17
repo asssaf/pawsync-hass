@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from custom_components.pawsync.pawsync import Device
 from custom_components.pawsync.sensor import (
@@ -7,6 +7,7 @@ from custom_components.pawsync.sensor import (
     SENSOR_TYPES,
     PawsyncDeviceSensor,
     PawsyncLogSensor,
+    _get_next_scheduled_feeding_time,
 )
 
 
@@ -38,6 +39,15 @@ def test_sensors():
                 {"version": "1.0.85", "isMainFw": True},
                 {"version": "mcu_1.0", "pluginName": "mcuFw"},
             ],
+            "scheduleInfo": {
+                "planId": 3,
+                "repeat": 254,
+                "nextDay": 2,
+                "nextTime": 75600,
+                "nextMount": 16,
+                "count": 3,
+                "totalMealG": 32,
+            },
         },
     }
     device = Device(device_data)
@@ -57,6 +67,8 @@ def test_sensors():
     assert sensors[8].native_value == 0
     assert sensors[9].native_value == "1.0.85"
     assert sensors[10].native_value == "mcu_1.0"
+    assert sensors[11].native_value is not None
+    assert sensors[12].native_value == 16
 
     assert sensors[0]._attr_extra_state_attributes["device_id"] == "id123"
     assert sensors[0]._attr_extra_state_attributes["device_name"] == "Feeder 1"
@@ -104,3 +116,61 @@ def test_log_sensors():
     assert sensors[2].native_value == datetime.fromtimestamp(1713610000, tz=UTC)
     assert sensors[3].native_value == 8
     assert sensors[4].native_value == 120
+
+
+def test_next_scheduled_feeding_time():
+    with patch("homeassistant.util.dt.now") as mock_now:
+        # Simulate Monday at 10:00:00 (weekday() == 0)
+        monday_dt = datetime(2026, 8, 17, 10, 0, 0, tzinfo=UTC)
+        mock_now.return_value = monday_dt
+
+        # Case 1: Next meal later today (21:00 = 75600 sec, nextDay=2 for Monday)
+        device = Device(
+            {
+                "deviceName": "Feeder",
+                "deviceImg": "",
+                "deviceDefaultImg": "",
+                "deviceId": "id1",
+                "connectionType": "wifi",
+                "secondaryCategory": "feeder",
+                "deviceModel": "m",
+                "configModel": "c",
+                "bizId": "b",
+                "petId": "p",
+                "deviceProp": {
+                    "scheduleInfo": {
+                        "nextTime": 75600,
+                        "nextDay": 2,
+                        "nextMount": 16,
+                    }
+                },
+            }
+        )
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 8, 17, 21, 0, 0, tzinfo=UTC
+        )
+
+        # Case 2: Next meal was earlier today, rolls to next week same day (nextDay=2)
+        device.deviceProp["scheduleInfo"]["nextTime"] = 28800  # 08:00
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 8, 24, 8, 0, 0, tzinfo=UTC
+        )
+
+        # Case 3: Next meal on Wednesday (nextDay=4, nextTime=08:00)
+        device.deviceProp["scheduleInfo"]["nextDay"] = 4
+        device.deviceProp["scheduleInfo"]["nextTime"] = 28800
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 8, 19, 8, 0, 0, tzinfo=UTC
+        )
+
+        # Case 4: No nextDay specified, earlier today -> rolls to tomorrow
+        device.deviceProp["scheduleInfo"] = {"nextTime": 28800}
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 8, 18, 8, 0, 0, tzinfo=UTC
+        )
+
+        # Case 5: No scheduleInfo or invalid nextTime -> returns None
+        device.deviceProp["scheduleInfo"] = {}
+        assert _get_next_scheduled_feeding_time(device) is None
+        device.deviceProp.pop("scheduleInfo")
+        assert _get_next_scheduled_feeding_time(device) is None

@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import homeassistant.util.dt as dt_util
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -29,6 +30,32 @@ from . import pawsync
 from .const import DOMAIN, PAWSYNC_COORDINATOR
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _get_next_scheduled_feeding_time(device: pawsync.Device) -> datetime | None:
+    """Calculate the next scheduled feeding timestamp."""
+    schedule_info = device.deviceProp.get("scheduleInfo")
+    if not isinstance(schedule_info, dict):
+        return None
+    next_time_sec = schedule_info.get("nextTime")
+    if next_time_sec is None:
+        return None
+    now = dt_util.now()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    scheduled_dt = midnight + timedelta(seconds=next_time_sec)
+
+    next_day = schedule_info.get("nextDay")
+    if isinstance(next_day, int) and 1 <= next_day <= 7:
+        target_py_weekday = (next_day - 2) % 7
+        days_ahead = (target_py_weekday - now.weekday()) % 7
+        if days_ahead == 0 and scheduled_dt <= now:
+            days_ahead = 7
+        scheduled_dt = midnight + timedelta(days=days_ahead, seconds=next_time_sec)
+    else:
+        if scheduled_dt <= now:
+            scheduled_dt += timedelta(days=1)
+
+    return scheduled_dt
 
 
 @dataclass(frozen=True)
@@ -137,6 +164,25 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
                 if fw.get("pluginName") == "mcuFw"
             ),
             None,
+        ),
+    ),
+    PawsyncSensorEntityDescription(
+        key="next_scheduled_feeding_time",
+        name="Next scheduled feeding time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-start",
+        value_fn=_get_next_scheduled_feeding_time,
+    ),
+    PawsyncSensorEntityDescription(
+        key="next_scheduled_feeding_amount",
+        name="Next scheduled feeding amount",
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:shaker-outline",
+        value_fn=lambda device: (
+            device.deviceProp.get("scheduleInfo", {}).get("nextMount")
+            if isinstance(device.deviceProp.get("scheduleInfo"), dict)
+            else None
         ),
     ),
 )
