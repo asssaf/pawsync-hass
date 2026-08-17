@@ -37,8 +37,15 @@ def _get_next_scheduled_feeding_time(device: pawsync.Device) -> datetime | None:
     schedule_info = device.deviceProp.get("scheduleInfo")
     if not isinstance(schedule_info, dict):
         return None
+
     next_time_sec = schedule_info.get("nextTime")
-    if next_time_sec is None:
+    if next_time_sec is None or (
+        next_time_sec == 0 and schedule_info.get("nextMount", 0) == 0
+    ):
+        return None
+
+    # When no schedule is configured (e.g. planId=0, repeat=0)
+    if schedule_info.get("planId") == 0 and schedule_info.get("repeat") == 0:
         return None
     now = dt_util.now()
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -182,6 +189,11 @@ SENSOR_TYPES: tuple[PawsyncSensorEntityDescription, ...] = (
         value_fn=lambda device: (
             device.deviceProp.get("scheduleInfo", {}).get("nextMount")
             if isinstance(device.deviceProp.get("scheduleInfo"), dict)
+            and not (
+                device.deviceProp.get("scheduleInfo", {}).get("planId") == 0
+                and device.deviceProp.get("scheduleInfo", {}).get("repeat") == 0
+            )
+            and (device.deviceProp.get("scheduleInfo", {}).get("nextMount") or 0) > 0
             else None
         ),
     ),

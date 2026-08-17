@@ -164,13 +164,79 @@ def test_next_scheduled_feeding_time():
         )
 
         # Case 4: No nextDay specified, earlier today -> rolls to tomorrow
-        device.deviceProp["scheduleInfo"] = {"nextTime": 28800}
+        device.deviceProp["scheduleInfo"] = {
+            "planId": 1,
+            "repeat": 254,
+            "nextTime": 28800,
+        }
         assert _get_next_scheduled_feeding_time(device) == datetime(
             2026, 8, 18, 8, 0, 0, tzinfo=UTC
         )
 
-        # Case 5: No scheduleInfo or invalid nextTime -> returns None
+        # Case 5: Nothing scheduled (all zeros)
+        device.deviceProp["scheduleInfo"] = {
+            "planId": 0,
+            "repeat": 0,
+            "nextDay": 0,
+            "nextTime": 0,
+            "nextMount": 0,
+            "count": 3,
+            "totalMealG": 0,
+        }
+        assert _get_next_scheduled_feeding_time(device) is None
+
+        # Case 6: No scheduleInfo or empty -> returns None
         device.deviceProp["scheduleInfo"] = {}
         assert _get_next_scheduled_feeding_time(device) is None
         device.deviceProp.pop("scheduleInfo")
         assert _get_next_scheduled_feeding_time(device) is None
+
+
+def test_next_scheduled_feeding_amount():
+    coordinator = MagicMock()
+    coordinator.last_update_success = True
+
+    amount_desc = next(
+        desc for desc in SENSOR_TYPES if desc.key == "next_scheduled_feeding_amount"
+    )
+
+    device_data = {
+        "deviceName": "Feeder",
+        "deviceImg": "",
+        "deviceDefaultImg": "",
+        "deviceId": "id1",
+        "connectionType": "wifi",
+        "secondaryCategory": "feeder",
+        "deviceModel": "m",
+        "configModel": "c",
+        "bizId": "b",
+        "petId": "p",
+        "deviceProp": {
+            "scheduleInfo": {
+                "planId": 3,
+                "repeat": 254,
+                "nextDay": 2,
+                "nextTime": 75600,
+                "nextMount": 16,
+            }
+        },
+    }
+    device = Device(device_data)
+    sensor = PawsyncDeviceSensor(coordinator, device, amount_desc)
+    assert sensor.native_value == 16
+
+    # Test nothing scheduled (all zeros) -> None
+    device.deviceProp["scheduleInfo"] = {
+        "planId": 0,
+        "repeat": 0,
+        "nextDay": 0,
+        "nextTime": 0,
+        "nextMount": 0,
+        "count": 3,
+        "totalMealG": 0,
+    }
+    assert sensor.native_value is None
+
+    # Test missing scheduleInfo -> None
+    device.deviceProp.pop("scheduleInfo")
+    assert sensor.native_value is None
