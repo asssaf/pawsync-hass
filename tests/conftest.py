@@ -137,7 +137,12 @@ class CoordinatorEntity:
         pass
 
 
+class UpdateFailed(Exception):
+    pass
+
+
 uc_mod.CoordinatorEntity = CoordinatorEntity
+uc_mod.UpdateFailed = UpdateFailed
 sys.modules["homeassistant.helpers.update_coordinator"] = uc_mod
 
 # Mock voluptuous

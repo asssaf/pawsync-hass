@@ -17,6 +17,7 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
+    UpdateFailed,
 )
 
 from . import pawsync
@@ -193,29 +194,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update():
         current_time = time.time()
 
-        devices = await pawsync.getDeviceList(session, logger)
-
-        if not devices:
-            await pawsync.login(session, username, password)
+        try:
             devices = await pawsync.getDeviceList(session, logger)
 
-            if not devices:
-                devices = []
+            if devices is None:
+                await pawsync.login(session, username, password)
+                devices = await pawsync.getDeviceList(session, logger)
 
-        for d in devices:
-            sessions[d.deviceId] = session
-            all_devices[d.deviceId] = d
+            if devices is None:
+                raise UpdateFailed("Failed to fetch device list from Pawsync API")
 
-        for d in devices:
-            status = await d.getStatus(session, logger)
-            if status:
-                d.deviceProp.update(status)
+            for d in devices:
+                sessions[d.deviceId] = session
+                all_devices[d.deviceId] = d
 
-        pet_logs = {}
-        for d in devices:
-            pet_logs[d.deviceId] = await pawsync.getPetLogList(
-                session, d.deviceId, logger
-            )
+            for d in devices:
+                status = await d.getStatus(session, logger)
+                if status:
+                    d.deviceProp.update(status)
+
+            pet_logs = {}
+            for d in devices:
+                pet_logs[d.deviceId] = await pawsync.getPetLogList(
+                    session, d.deviceId, logger
+                )
+        except UpdateFailed:
+            raise
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with Pawsync API: {err}") from err
 
         # Handle fast polling duration
         if (

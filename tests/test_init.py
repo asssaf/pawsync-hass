@@ -440,3 +440,48 @@ async def test_async_update_scheduled_feed_preempted_by_refresh():
             assert mock_track_time.call_args[0][2] == datetime(
                 2026, 8, 17, 14, 0, 0, tzinfo=UTC
             )
+
+
+@pytest.mark.asyncio
+async def test_async_update_failure_raises_update_failed():
+    """Test that API errors during update raise UpdateFailed."""
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    hass = MagicMock()
+    hass.data = {}
+    hass.config_entries.async_forward_entry_setups = AsyncMock()
+
+    entry = MagicMock()
+    entry.entry_id = "entry_1"
+    entry.data = {"username": "test@example.com", "password": "password123"}
+    entry.options = {}
+
+    with (
+        patch("custom_components.pawsync.pawsync.login", new_callable=AsyncMock),
+        patch(
+            "custom_components.pawsync.pawsync.getDeviceList",
+            new_callable=AsyncMock,
+        ) as mock_devices,
+        patch(
+            "custom_components.pawsync.DataUpdateCoordinator"
+        ) as mock_coordinator_cls,
+    ):
+        mock_coord = MagicMock()
+        mock_coord.async_config_entry_first_refresh = AsyncMock()
+        mock_coordinator_cls.return_value = mock_coord
+
+        mock_devices.return_value = []
+        await async_setup_entry(hass, entry)
+        async_update = mock_coordinator_cls.call_args[1]["update_method"]
+
+        # Case 1: getDeviceList returns None and retry also returns None -> UpdateFailed
+        mock_devices.return_value = None
+        with pytest.raises(
+            UpdateFailed, match="Failed to fetch device list from Pawsync API"
+        ):
+            await async_update()
+
+        # Case 2: Exception raised during fetch -> UpdateFailed
+        mock_devices.side_effect = ConnectionError("Network unreachable")
+        with pytest.raises(UpdateFailed, match="Error communicating with Pawsync API"):
+            await async_update()
