@@ -39,12 +39,20 @@ sys.modules["homeassistant.util"] = util_module
 dt_mod = MockModule()
 dt_mod.now = lambda time_zone=None: datetime.now(UTC)
 dt_mod.utcnow = lambda: datetime.now(UTC)
+dt_mod.as_utc = lambda dt: (
+    dt
+    if getattr(dt, "tzinfo", None) == UTC
+    else (dt.astimezone(UTC) if getattr(dt, "tzinfo", None) else dt.replace(tzinfo=UTC))
+)
 sys.modules["homeassistant.util.dt"] = dt_mod
 
 # Mock helpers subpackages
 sys.modules["homeassistant.helpers.config_validation"] = MockModule()
 sys.modules["homeassistant.helpers.typing"] = MockModule()
 sys.modules["homeassistant.helpers.entity_platform"] = MockModule()
+event_mod = MockModule()
+event_mod.async_track_point_in_utc_time = MagicMock()
+sys.modules["homeassistant.helpers.event"] = event_mod
 
 # Mock config_entries
 config_entries = MockModule()

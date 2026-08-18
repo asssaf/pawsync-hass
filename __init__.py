@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
 
 import aiohttp
 import homeassistant.helpers.config_validation as cv
@@ -10,8 +11,9 @@ import homeassistant.util.dt as dt_util
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -129,8 +131,55 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await pawsync.login(session, username, password)
 
-    async def async_update():
+    unsub_feed_timer: Callable[[], None] | None = None
+    scheduled_feed_time: datetime | None = None
+
+    def _schedule_next_feed_timer(next_feed_dts: list[datetime]) -> None:
+        nonlocal unsub_feed_timer, scheduled_feed_time
         now = dt_util.now()
+
+        # If the previous scheduled feed was reached within the last 5 minutes,
+        # ensure fast polling is activated even if the timer callback was preempted
+        if (
+            scheduled_feed_time is not None
+            and scheduled_feed_time
+            <= now
+            <= scheduled_feed_time + timedelta(seconds=300)
+        ):
+            coordinator.fast_polling_until = time.time() + 300
+            coordinator.update_interval = timedelta(seconds=15)
+
+        if not next_feed_dts:
+            if unsub_feed_timer:
+                unsub_feed_timer()
+                unsub_feed_timer = None
+                scheduled_feed_time = None
+            return
+
+        earliest_next_feed = min(next_feed_dts)
+        if unsub_feed_timer and scheduled_feed_time == earliest_next_feed:
+            return
+
+        if unsub_feed_timer:
+            unsub_feed_timer()
+            unsub_feed_timer = None
+
+        scheduled_feed_time = earliest_next_feed
+
+        @callback
+        def _on_feed_due(_now: datetime) -> None:
+            nonlocal unsub_feed_timer, scheduled_feed_time
+            unsub_feed_timer = None
+            scheduled_feed_time = None
+            coordinator.fast_polling_until = time.time() + 300
+            coordinator.update_interval = timedelta(seconds=15)
+            hass.async_create_task(coordinator.async_request_refresh())
+
+        unsub_feed_timer = async_track_point_in_utc_time(
+            hass, _on_feed_due, dt_util.as_utc(earliest_next_feed)
+        )
+
+    async def async_update():
         current_time = time.time()
 
         devices = await pawsync.getDeviceList(session, logger)
@@ -157,7 +206,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 session, d.deviceId, logger
             )
 
-        # Handle fast polling and adaptive interval calculation
+        # Handle fast polling duration
         if (
             coordinator.fast_polling_until is not None
             and current_time <= coordinator.fast_polling_until
@@ -165,24 +214,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator.update_interval = timedelta(seconds=15)
         else:
             coordinator.fast_polling_until = None
-            next_feed_dts = [
-                _get_next_scheduled_feeding_time(d)
-                for d in devices
-                if _get_next_scheduled_feeding_time(d) is not None
-            ]
-            if next_feed_dts:
-                earliest_next_feed = min(next_feed_dts)
-                seconds_to_feed = (earliest_next_feed - now).total_seconds()
-                if seconds_to_feed <= 15:
-                    coordinator.fast_polling_until = current_time + 300
-                    coordinator.update_interval = timedelta(seconds=15)
-                else:
-                    coordinator.update_interval = min(
-                        timedelta(minutes=15),
-                        timedelta(seconds=max(15, seconds_to_feed)),
-                    )
-            else:
-                coordinator.update_interval = timedelta(minutes=15)
+            coordinator.update_interval = timedelta(minutes=15)
+
+        next_feed_dts = [
+            _get_next_scheduled_feeding_time(d)
+            for d in devices
+            if _get_next_scheduled_feeding_time(d) is not None
+        ]
+        _schedule_next_feed_timer(next_feed_dts)
 
         return {"devices": devices, "pet_logs": pet_logs}
 
@@ -196,6 +235,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator.fast_polling_until = None
     await coordinator.async_config_entry_first_refresh()
+
+    def _cancel_feed_timer():
+        nonlocal unsub_feed_timer
+        if unsub_feed_timer:
+            unsub_feed_timer()
+            unsub_feed_timer = None
+
+    entry.async_on_unload(_cancel_feed_timer)
 
     async def re_login():
         await pawsync.login(session, username, password)
