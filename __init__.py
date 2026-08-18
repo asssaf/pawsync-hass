@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 import homeassistant.helpers.config_validation as cv
@@ -103,6 +103,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     coord = entry_data[PAWSYNC_COORDINATOR]
                     devices = (coord.data or {}).get("devices", [])
                     if any(d.deviceId == device_id for d in devices):
+                        logger.debug(
+                            "Enabling fast polling for 5 minutes after manual feed (device %s)",
+                            device_id,
+                        )
                         coord.fast_polling_until = time.time() + 300
                         coord.update_interval = timedelta(seconds=15)
                         hass.async_create_task(coord.async_request_refresh())
@@ -146,6 +150,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             <= now
             <= scheduled_feed_time + timedelta(seconds=300)
         ):
+            logger.debug(
+                "Scheduled feeding time passed recently (%s); enabling fast polling for 5 minutes",
+                scheduled_feed_time,
+            )
             coordinator.fast_polling_until = time.time() + 300
             coordinator.update_interval = timedelta(seconds=15)
 
@@ -171,6 +179,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             nonlocal unsub_feed_timer, scheduled_feed_time
             unsub_feed_timer = None
             scheduled_feed_time = None
+            logger.debug(
+                "Scheduled feeding time reached; enabling fast polling for 5 minutes"
+            )
             coordinator.fast_polling_until = time.time() + 300
             coordinator.update_interval = timedelta(seconds=15)
             hass.async_create_task(coordinator.async_request_refresh())
@@ -211,8 +222,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator.fast_polling_until is not None
             and current_time <= coordinator.fast_polling_until
         ):
+            if coordinator.update_interval != timedelta(seconds=15):
+                logger.debug(
+                    "Fast polling active (until %s); setting update interval to 15 seconds",
+                    datetime.fromtimestamp(
+                        coordinator.fast_polling_until, tz=UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                )
             coordinator.update_interval = timedelta(seconds=15)
         else:
+            if (
+                coordinator.fast_polling_until is not None
+                or coordinator.update_interval != timedelta(minutes=15)
+            ):
+                logger.debug(
+                    "Fast polling inactive; reverting update interval to 15 minutes"
+                )
             coordinator.fast_polling_until = None
             coordinator.update_interval = timedelta(minutes=15)
 
