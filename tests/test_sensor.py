@@ -191,6 +191,20 @@ def test_next_scheduled_feeding_time():
         device.deviceProp.pop("scheduleInfo")
         assert _get_next_scheduled_feeding_time(device) is None
 
+        # Case 7: Daylight Saving Time transition (Spring forward)
+        import zoneinfo
+
+        tz = zoneinfo.ZoneInfo("America/Los_Angeles")
+        mock_now.return_value = datetime(2026, 3, 7, 23, 0, 0, tzinfo=tz)
+        device.deviceProp["scheduleInfo"] = {
+            "planId": 1,
+            "repeat": 254,
+            "nextTime": 36000,  # 10:00 AM
+        }
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 3, 8, 10, 0, 0, tzinfo=tz
+        )
+
 
 def test_next_scheduled_feeding_amount():
     coordinator = MagicMock()
