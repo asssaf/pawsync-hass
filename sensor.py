@@ -57,8 +57,27 @@ def _get_next_scheduled_feeding_time(device: pawsync.Device) -> datetime | None:
         hour=hour, minute=minute, second=second, microsecond=0
     )
 
+    repeat = schedule_info.get("repeat")
     next_day = schedule_info.get("nextDay")
-    if isinstance(next_day, int) and 1 <= next_day <= 7:
+
+    if repeat == 254 or repeat == 127:
+        days_ahead = 1 if target_dt_today <= now else 0
+    elif isinstance(repeat, int) and repeat > 0:
+        days_ahead = None
+        bit_shift = 0 if (repeat & 1) else 1
+        for d in range(8):
+            cand_weekday = (now.weekday() + d) % 7
+            if repeat & (1 << (cand_weekday + bit_shift)):
+                if d == 0:
+                    if target_dt_today > now:
+                        days_ahead = 0
+                        break
+                else:
+                    days_ahead = d
+                    break
+        if days_ahead is None:
+            days_ahead = 1 if target_dt_today <= now else 0
+    elif isinstance(next_day, int) and 1 <= next_day <= 7:
         target_py_weekday = (next_day - 2) % 7
         days_ahead = (target_py_weekday - now.weekday()) % 7
         if days_ahead == 0 and target_dt_today <= now:

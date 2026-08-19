@@ -205,6 +205,32 @@ def test_next_scheduled_feeding_time():
             2026, 3, 8, 10, 0, 0, tzinfo=tz
         )
 
+        # Case 8: Daily feeding tonight (Tuesday 20:23 PDT, feeding at 21:00 with UTC nextDay=4)
+        mock_now.return_value = datetime(2026, 8, 18, 20, 23, 55, tzinfo=tz)
+        device.deviceProp["scheduleInfo"] = {
+            "planId": 1,
+            "repeat": 254,
+            "nextDay": 4,  # UTC day is Wednesday
+            "nextTime": 75600,  # 21:00:00
+            "nextMount": 16,
+        }
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 8, 18, 21, 0, 0, tzinfo=tz
+        )
+
+        # Case 9: Custom schedule (Mon/Wed/Fri = bits 1, 3, 5 -> repeat=42) on Tuesday
+        mock_now.return_value = datetime(2026, 8, 18, 20, 23, 55, tzinfo=tz)
+        device.deviceProp["scheduleInfo"] = {
+            "planId": 1,
+            "repeat": 42,
+            "nextTime": 75600,  # 21:00:00
+            "nextMount": 16,
+        }
+        # Next active day is Wednesday (tomorrow)
+        assert _get_next_scheduled_feeding_time(device) == datetime(
+            2026, 8, 19, 21, 0, 0, tzinfo=tz
+        )
+
 
 def test_next_scheduled_feeding_amount():
     coordinator = MagicMock()
