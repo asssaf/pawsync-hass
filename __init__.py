@@ -2,22 +2,27 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 import homeassistant.helpers.config_validation as cv
+import homeassistant.util.dt as dt_util
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
+    UpdateFailed,
 )
 
 from . import pawsync
 from .const import DOMAIN, PAWSYNC_COORDINATOR, PLATFORMS, TOKEN_INVALID_CODE
+from .sensor import _get_next_scheduled_feeding_time
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +104,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     coord = entry_data[PAWSYNC_COORDINATOR]
                     devices = (coord.data or {}).get("devices", [])
                     if any(d.deviceId == device_id for d in devices):
+                        logger.debug(
+                            "Enabling fast polling for 5 minutes after manual feed (device %s)",
+                            device_id,
+                        )
                         coord.fast_polling_until = time.time() + 300
                         coord.update_interval = timedelta(seconds=15)
                         hass.async_create_task(coord.async_request_refresh())
@@ -127,37 +136,123 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await pawsync.login(session, username, password)
 
-    async def async_update():
+    unsub_feed_timer: Callable[[], None] | None = None
+    scheduled_feed_time: datetime | None = None
+
+    def _schedule_next_feed_timer(next_feed_dts: list[datetime]) -> None:
+        nonlocal unsub_feed_timer, scheduled_feed_time
+        now = dt_util.now()
+
+        # If the previous scheduled feed was reached within the last 5 minutes,
+        # ensure fast polling is activated even if the timer callback was preempted
         if (
-            coordinator.fast_polling_until is not None
-            and time.time() > coordinator.fast_polling_until
+            scheduled_feed_time is not None
+            and scheduled_feed_time
+            <= now
+            <= scheduled_feed_time + timedelta(seconds=300)
         ):
-            coordinator.update_interval = timedelta(minutes=15)
-            coordinator.fast_polling_until = None
+            logger.debug(
+                "Scheduled feeding time passed recently (%s); enabling fast polling for 5 minutes",
+                scheduled_feed_time,
+            )
+            coordinator.fast_polling_until = time.time() + 300
+            coordinator.update_interval = timedelta(seconds=15)
 
-        devices = await pawsync.getDeviceList(session, logger)
+        if not next_feed_dts:
+            if unsub_feed_timer:
+                unsub_feed_timer()
+                unsub_feed_timer = None
+                scheduled_feed_time = None
+            return
 
-        if not devices:
-            await pawsync.login(session, username, password)
+        earliest_next_feed = min(next_feed_dts)
+        if unsub_feed_timer and scheduled_feed_time == earliest_next_feed:
+            return
+
+        if unsub_feed_timer:
+            unsub_feed_timer()
+            unsub_feed_timer = None
+
+        scheduled_feed_time = earliest_next_feed
+
+        @callback
+        def _on_feed_due(_now: datetime) -> None:
+            nonlocal unsub_feed_timer, scheduled_feed_time
+            unsub_feed_timer = None
+            scheduled_feed_time = None
+            logger.debug(
+                "Scheduled feeding time reached; enabling fast polling for 5 minutes"
+            )
+            coordinator.fast_polling_until = time.time() + 300
+            coordinator.update_interval = timedelta(seconds=15)
+            hass.async_create_task(coordinator.async_request_refresh())
+
+        unsub_feed_timer = async_track_point_in_utc_time(
+            hass, _on_feed_due, dt_util.as_utc(earliest_next_feed)
+        )
+
+    async def async_update():
+        current_time = time.time()
+
+        try:
             devices = await pawsync.getDeviceList(session, logger)
 
-            if not devices:
-                devices = []
+            if devices is None:
+                await pawsync.login(session, username, password)
+                devices = await pawsync.getDeviceList(session, logger)
 
-        for d in devices:
-            sessions[d.deviceId] = session
-            all_devices[d.deviceId] = d
+            if devices is None:
+                raise UpdateFailed("Failed to fetch device list from Pawsync API")
 
-        for d in devices:
-            status = await d.getStatus(session, logger)
-            if status:
-                d.deviceProp.update(status)
+            for d in devices:
+                sessions[d.deviceId] = session
+                all_devices[d.deviceId] = d
 
-        pet_logs = {}
-        for d in devices:
-            pet_logs[d.deviceId] = await pawsync.getPetLogList(
-                session, d.deviceId, logger
-            )
+            for d in devices:
+                status = await d.getStatus(session, logger)
+                if status:
+                    d.deviceProp.update(status)
+
+            pet_logs = {}
+            for d in devices:
+                pet_logs[d.deviceId] = await pawsync.getPetLogList(
+                    session, d.deviceId, logger
+                )
+        except UpdateFailed:
+            raise
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with Pawsync API: {err}") from err
+
+        # Handle fast polling duration
+        if (
+            coordinator.fast_polling_until is not None
+            and current_time <= coordinator.fast_polling_until
+        ):
+            if coordinator.update_interval != timedelta(seconds=15):
+                logger.debug(
+                    "Fast polling active (until %s); setting update interval to 15 seconds",
+                    datetime.fromtimestamp(
+                        coordinator.fast_polling_until, tz=UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                )
+            coordinator.update_interval = timedelta(seconds=15)
+        else:
+            if (
+                coordinator.fast_polling_until is not None
+                or coordinator.update_interval != timedelta(minutes=15)
+            ):
+                logger.debug(
+                    "Fast polling inactive; reverting update interval to 15 minutes"
+                )
+            coordinator.fast_polling_until = None
+            coordinator.update_interval = timedelta(minutes=15)
+
+        next_feed_dts = [
+            _get_next_scheduled_feeding_time(d)
+            for d in devices
+            if _get_next_scheduled_feeding_time(d) is not None
+        ]
+        _schedule_next_feed_timer(next_feed_dts)
 
         return {"devices": devices, "pet_logs": pet_logs}
 
@@ -171,6 +266,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator.fast_polling_until = None
     await coordinator.async_config_entry_first_refresh()
+
+    def _cancel_feed_timer():
+        nonlocal unsub_feed_timer
+        if unsub_feed_timer:
+            unsub_feed_timer()
+            unsub_feed_timer = None
+
+    entry.async_on_unload(_cancel_feed_timer)
 
     async def re_login():
         await pawsync.login(session, username, password)

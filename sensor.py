@@ -47,22 +47,54 @@ def _get_next_scheduled_feeding_time(device: pawsync.Device) -> datetime | None:
     # When no schedule is configured (e.g. planId=0, repeat=0)
     if schedule_info.get("planId") == 0 and schedule_info.get("repeat") == 0:
         return None
-    now = dt_util.now()
-    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    scheduled_dt = midnight + timedelta(seconds=next_time_sec)
 
+    now = dt_util.now()
+    hour = (next_time_sec // 3600) % 24
+    minute = (next_time_sec % 3600) // 60
+    second = next_time_sec % 60
+
+    target_dt_today = now.replace(
+        hour=hour, minute=minute, second=second, microsecond=0
+    )
+
+    repeat = schedule_info.get("repeat")
     next_day = schedule_info.get("nextDay")
-    if isinstance(next_day, int) and 1 <= next_day <= 7:
+
+    if repeat == 254 or repeat == 127:
+        days_ahead = 1 if target_dt_today <= now else 0
+    elif isinstance(repeat, int) and repeat > 0:
+        days_ahead = None
+        bit_shift = 0 if (repeat & 1) else 1
+        for d in range(8):
+            cand_weekday = (now.weekday() + d) % 7
+            if repeat & (1 << (cand_weekday + bit_shift)):
+                if d == 0:
+                    if target_dt_today > now:
+                        days_ahead = 0
+                        break
+                else:
+                    days_ahead = d
+                    break
+        if days_ahead is None:
+            days_ahead = 1 if target_dt_today <= now else 0
+    elif isinstance(next_day, int) and 1 <= next_day <= 7:
         target_py_weekday = (next_day - 2) % 7
         days_ahead = (target_py_weekday - now.weekday()) % 7
-        if days_ahead == 0 and scheduled_dt <= now:
+        if days_ahead == 0 and target_dt_today <= now:
             days_ahead = 7
-        scheduled_dt = midnight + timedelta(days=days_ahead, seconds=next_time_sec)
     else:
-        if scheduled_dt <= now:
-            scheduled_dt += timedelta(days=1)
+        days_ahead = 1 if target_dt_today <= now else 0
 
-    return scheduled_dt
+    target_date = (now + timedelta(days=days_ahead)).date()
+    return now.replace(
+        year=target_date.year,
+        month=target_date.month,
+        day=target_date.day,
+        hour=hour,
+        minute=minute,
+        second=second,
+        microsecond=0,
+    )
 
 
 @dataclass(frozen=True)
